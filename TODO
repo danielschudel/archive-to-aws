@@ -1,0 +1,16 @@
+1 - Input is always a directory
+2 - Nag if size is > 1GB
+3 - If a sha1sum file is found, then check the files
+4 - Compute sha1sums for all files in directory
+	a - store results in file in directory
+	b - store results in file outside directory
+5 - Create tarball
+	a - compute sha1sum and record
+6 - If encrypt, the gpg AES symmetric encrypt
+	a - compute sha1sum and record
+7 - decrypt and check sum
+8 - untar and
+	a - check sum
+	b - check two directories
+9 - Upload archive to Glacier <vault>/<archive>
+10 - Upload records to S3 Glacier/<vault>/<archive>
