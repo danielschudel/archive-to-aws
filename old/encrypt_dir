@@ -1,0 +1,29 @@
+#!/bin/bash
+
+dir=$1
+o=${dir}.tar.bz2.gpg
+
+if [ ! -d "${dir}" ]; then
+	printf "Specified directory does not exist, aborting.\n"
+	exit
+fi
+
+printf "Recoding SHA-1 Sums\n"
+cd ${dir}
+find . -type f -print0 | xargs -0 sha1sum | fgrep -v files.sha1sum > files.sha1sum
+cd ..
+
+printf "Creating encrypted container ${o}\n"
+
+tar jcf - ${dir} | gpg --symmetric --yes --no-use-agent --passphrase 'p' --cipher-algo aes256 -o ${o}
+
+t=$(mktemp -d t.XXXXXX)
+
+printf "Validating contents of container ${o}\n"
+gpg --decrypt --yes --no-use-agent --passphrase 'p' --cipher-algo aes256 ${o} | tar -C ${t} -xjf -
+
+cd ${t}/${dir}
+sha1sum -c files.sha1sum
+cd ../..
+
+/bin/rm -rf ${t}
