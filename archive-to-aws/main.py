@@ -13,3 +13,6 @@ if len(sys.argv) < 2:
 if sys.argv[1] == "create":
     a = archive.archive(sys.argv[2])
     a.create()
+elif sys.argv[1] == "validate":
+    a = archive.archive(sys.argv[2])
+    a.validate()
