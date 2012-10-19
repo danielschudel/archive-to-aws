@@ -7,7 +7,7 @@ oneGB = 1*1024*1024*1024
 suggestedMaxSize = oneGB
 
 class archive:
-    def __init__(self, dirOrFile):
+    def __init__(self, vault, dirOrFile):
         self.suffix = ".archive.tar"
         if os.path.isdir(dirOrFile):
             directory = os.path.abspath(dirOrFile)
@@ -18,30 +18,60 @@ class archive:
         else:
             sys.exit("Failed to find {0}".format(dirOrFile))
 
+        self.glacierVault         = vault
         # Partial name of the archive
-        self.archiveName        = os.path.basename(directory)
+        self.archiveName          = os.path.basename(directory)
         # Full name of the directory to be archived
-        self.archiveDirectory   = directory
+        self.archiveDirectory     = directory
         # Full name of the archive file
-        self.archiveFile        = filename
+        self.archiveFile          = filename
         # Archive needs to be created relative to here
-        self.parent             = os.path.dirname(directory)
+        self.parent               = os.path.dirname(directory)
         # Accounting file to be included in the archive
-        self.internalAccounting = directory + "/files.sha1sum"
+        self.internalAccounting   = directory + "/files.sha1sum"
         # Accounting file to be stashed away
-        self.externalAccounting = filename  + ".sha1sum"
+        self.externalAccounting   = filename  + ".sha1sum"
+        # Accounting file in S3
+        self.externalAccountingS3 = "/GlacierArchives/Vault-{0}/{1}".format(self.glacierVault,os.path.basename(self.externalAccounting))
 
         print "Important variables"
+        print " Vault       = {0}".format(self.glacierVault)
         print " ArchiveName = {0}".format(self.archiveName)
         print " ArchiveDir  = {0}".format(self.archiveDirectory)
         print " ArchiveFile = {0}".format(self.archiveFile)
         print " Parent      = {0}".format(self.parent)
         print " Internal    = {0}".format(self.internalAccounting)
         print " External    = {0}".format(self.externalAccounting)
+        print " ExternalS3  = {0}".format(self.externalAccountingS3)
 
     def validate(self):
         print "Performing Sanity checks"
         self.validateSanityChecks()
+        print "Validating archive"
+        self.validateArchive()
+
+    def lookupSha1sum(self, filename):
+        f = open(self.externalAccounting, 'r')
+        for line in f:
+            sum, file = line.split("  ")
+            file = file.strip()
+            if file == filename:
+                f.close()
+                return sum
+        f.close()
+        return 0
+
+    def validateArchive(self):
+        # look through self.externalAccounting and match on self.archiveFile
+        # pull out sha1sum and compare
+        recorded = self.lookupSha1sum(os.path.basename(self.archiveFile))
+        computed = self.computeSha1sum(self.archiveFile)
+        if (recorded == computed):
+            print " Archive checksum matches local file"
+        else:
+            print " Computed = {0}".format(computed)
+            print " Recorded = {0}".format(recorded)
+            sys.exit("Sums do not match, exiting")
 
     def validateSanityChecks(self):
         if False == os.path.isfile(self.archiveFile):

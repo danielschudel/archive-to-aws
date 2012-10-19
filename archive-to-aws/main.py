@@ -11,8 +11,8 @@ if len(sys.argv) < 2:
     sys.exit(s)
 
 if sys.argv[1] == "create":
-    a = archive.archive(sys.argv[2])
+    a = archive.archive(sys.argv[2], sys.argv[3])
     a.create()
 elif sys.argv[1] == "validate":
-    a = archive.archive(sys.argv[2])
+    a = archive.archive(sys.argv[2], sys.argv[3])
     a.validate()
