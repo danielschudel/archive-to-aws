@@ -2,12 +2,17 @@ import os
 import sys
 import hashlib
 import tarfile
+import boto
+try:
+    import boto.glacier
+except:
+    sys.exit("Failed to import a version of boto that has Glacier Support")
 
 oneGB = 1*1024*1024*1024
 suggestedMaxSize = oneGB
 
 class archive:
-    def __init__(self, vault, dirOrFile):
+    def __init__(self, dirOrFile, vault):
         self.suffix = ".archive.tar"
         if os.path.isdir(dirOrFile):
             directory = os.path.abspath(dirOrFile)
@@ -18,7 +23,6 @@ class archive:
         else:
             sys.exit("Failed to find {0}".format(dirOrFile))
 
-        self.glacierVault         = vault
         # Partial name of the archive
         self.archiveName          = os.path.basename(directory)
         # Full name of the directory to be archived
@@ -32,10 +36,13 @@ class archive:
         # Accounting file to be stashed away
         self.externalAccounting   = filename  + ".sha1sum"
         # Accounting file in S3
-        self.externalAccountingS3 = "/GlacierArchives/Vault-{0}/{1}".format(self.glacierVault,os.path.basename(self.externalAccounting))
+        self.bucketName           = "glacier_archives"
+        self.glacierVault         = vault
+        self.externalAccountingS3 = "Vault-{0}/{1}".format(self.glacierVault,os.path.basename(self.externalAccounting))
 
         print "Important variables"
         print " Vault       = {0}".format(self.glacierVault)
+        print " Bucket      = {0}".format(self.bucketName)
         print " ArchiveName = {0}".format(self.archiveName)
         print " ArchiveDir  = {0}".format(self.archiveDirectory)
         print " ArchiveFile = {0}".format(self.archiveFile)
@@ -168,3 +175,64 @@ class archive:
                 if (os.path.isfile(fp)):
                     total_size += os.path.getsize(fp)
         return total_size
+
+    def uploadSanityCheck(self, options):
+        abort = False;
+        for k in ['region', 'vault']:
+            if False == options.has_key(k):
+                print(" Need to specify --{0}".format(k))
+                abort = True
+
+        if False == os.path.isfile(self.archiveFile):
+            print " Archive file {0} does not exist".format(self.archiveFile)
+            abort = True
+
+        if False == os.path.isfile(self.externalAccounting):
+            print " Accounting file {0} does not exist".format(self.externalAccounting)
+            abort = True
+
+        print " Boto version {0}".format(boto.Version)
+
+        if abort:
+            sys.exit(" Aborting...")
+
+    def uploadToGlacier(self, srcfile, options):
+        print "Uploading {0} to glacier://{1}".format(srcfile, self.glacierVault)
+        layer2 = boto.glacier.connect_to_region(options['region'], aws_access_key_id=options['access_key'], aws_secret_access_key=options['secret_key'])
+        layer2.create_vault(self.glacierVault)
+        glacier_vault = layer2.get_vault(self.glacierVault)
+        glacier_vault.upload_archive(srcfile)
+
+    def uploadToS3(self, destfile, srcfile):
+        print "Uploading {0} to s3://{1}/{2}".format(srcfile, self.bucketName, destfile)
+        c = boto.connect_s3(aws_access_key_id=self.aws_access_key_id, aws_secret_access_key=self.aws_secret_access_key)
+        print " Creating bucket s3://{0}".format(self.bucketName)
+        b = c.create_bucket(self.bucketName)
+        if None != b.get_key(destfile):
+            print " File is already in S3"
+            return
+        print " Preparing file for upload to {0}".format(destfile)
+        k = b.new_key(destfile)
+        k.set_contents_from_filename(srcfile, reduced_redundancy=True, cb=submit_cb, num_cb=100)
+        pass
+
+    def upload(self, options):
+        print "Performing Sanity checks"
+        self.uploadSanityCheck(options)
+
+        self.aws_access_key_id = None
+        if options.has_key('access_key'):
+            self.aws_access_key_id = options['access_key']
+
+        self.aws_secret_access_key = None
+        if options.has_key('secret_key'):
+            self.aws_secret_access_key = options['secret_key']
+
+        # Upload the accounting file
+        self.uploadToS3(self.externalAccountingS3, self.externalAccounting)
+
+        # Upload the archive
+        self.uploadToGlacier(self.archiveFile, options)
+
+def submit_cb(bytes_so_far, total_bytes):
+    print '%d bytes transferred / %d bytes total' % (bytes_so_far, total_bytes)

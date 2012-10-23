@@ -1,6 +1,6 @@
 
 def usage():
-    return "create <vault> <directory name>"
+    return "create <directory name>"
 
 
 def entry(argv):
