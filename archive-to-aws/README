@@ -1,0 +1,21 @@
+Explanation of files:
+	Origin:
+		file:DirectoryToBeArchived
+		file:DirectoryToBeArchived/SubDir0
+		file:DirectoryToBeArchived/SubDir0/File0
+		file:DirectoryToBeArchived/SubDir1
+		file:DirectoryToBeArchived/SubDir1/File1
+		file:DirectoryToBeArchived/SubDir1/File2
+		file:DirectoryToBeArchived/SubDir1/File3
+
+	After "create" stage ("Origin", plus...):
+		file:DirectoryToBeArchived/files.sha1sum
+		file:DirectoryToBeArchived.archive.tar
+		file:DirectoryToBeArchived.archive.tar.sha1sum
+
+	After "upload" stage ("create", plus...):
+		s3:glacier_archives/Vault-{specified vault}/DirectoryToBeArchived.archive.tar.sha1sum
+		glacier:/{specified vault}/DirectoryToBeArchived.archive.tar
+		file:DirectoryToBeArchived.archive.tar.sha1sum (modified)
+
+#  vi: ts=2
