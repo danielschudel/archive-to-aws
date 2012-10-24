@@ -198,23 +198,38 @@ class archive:
 
     def uploadToGlacier(self, srcfile, options):
         print "Uploading {0} to glacier://{1}".format(srcfile, self.glacierVault)
-        layer2 = boto.glacier.connect_to_region(options['region'], aws_access_key_id=options['access_key'], aws_secret_access_key=options['secret_key'])
-        layer2.create_vault(self.glacierVault)
-        glacier_vault = layer2.get_vault(self.glacierVault)
-        glacier_vault.upload_archive(srcfile)
+
+        glacier_vault = self.glacierConnection.get_vault(self.glacierVault)
+        # TODO - Save archiveId vault.name and full vault.arn in externalAccountingFile
+        # TODO - use try/catch/except to catch failures
+        archiveId = glacier_vault.upload_archive(srcfile)
 
     def uploadToS3(self, destfile, srcfile):
         print "Uploading {0} to s3://{1}/{2}".format(srcfile, self.bucketName, destfile)
-        c = boto.connect_s3(aws_access_key_id=self.aws_access_key_id, aws_secret_access_key=self.aws_secret_access_key)
-        print " Creating bucket s3://{0}".format(self.bucketName)
-        b = c.create_bucket(self.bucketName)
-        if None != b.get_key(destfile):
-            print " File is already in S3"
-            return
         print " Preparing file for upload to {0}".format(destfile)
-        k = b.new_key(destfile)
+        k = self.s3Bucket.new_key(destfile)
         k.set_contents_from_filename(srcfile, reduced_redundancy=True, cb=submit_cb, num_cb=100)
         pass
+
+    def makeConnections(self, options):
+        print " Connecting to S3"
+        self.s3Connection = boto.connect_s3(aws_access_key_id=self.aws_access_key_id, aws_secret_access_key=self.aws_secret_access_key)
+        print " Creating bucket s3://{0}".format(self.bucketName)
+        self.s3Bucket = self.s3Connection.create_bucket(self.bucketName)
+        if None != self.s3Bucket.get_key(self.externalAccountingS3):
+            sys.exit(" File is already in S3")
+
+        print " Connecting to Glacier"
+        self.glacierConnection = boto.glacier.connect_to_region(options['region'], aws_access_key_id=options['access_key'], aws_secret_access_key=options['secret_key'])
+        inThere = False
+        for vault in self.glacierConnection.list_vaults():
+            if self.glacierVault == vault.name:
+                inThere = True
+                break
+
+        if inThere == False:
+            sys.exit(" Vault {0} is not in Glacier at the moment. Aborting.".format(self.glacierVault))
+
 
     def upload(self, options):
         print "Performing Sanity checks"
@@ -228,11 +243,14 @@ class archive:
         if options.has_key('secret_key'):
             self.aws_secret_access_key = options['secret_key']
 
-        # Upload the accounting file
-        self.uploadToS3(self.externalAccountingS3, self.externalAccounting)
+        print "Making connections to AWS"
+        self.makeConnections(options)
 
         # Upload the archive
         self.uploadToGlacier(self.archiveFile, options)
+
+        # Upload the accounting file
+        self.uploadToS3(self.externalAccountingS3, self.externalAccounting)
 
 def submit_cb(bytes_so_far, total_bytes):
     print '%d bytes transferred / %d bytes total' % (bytes_so_far, total_bytes)
