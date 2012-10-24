@@ -199,10 +199,20 @@ class archive:
     def uploadToGlacier(self, srcfile, options):
         print "Uploading {0} to glacier://{1}".format(srcfile, self.glacierVault)
 
+        print " Vault is     - {0}".format(glacier_vault.arn)
         glacier_vault = self.glacierConnection.get_vault(self.glacierVault)
-        # TODO - Save archiveId vault.name and full vault.arn in externalAccountingFile
+
         # TODO - use try/catch/except to catch failures
         archiveId = glacier_vault.upload_archive(srcfile)
+        print " ArchiveID is - {0}".format(archiveId)
+
+        sha1sum = self.computeSha1sum(self.externalAccounting)
+        ea = open(self.externalAccounting, 'a')
+        ea.write("# SHA1 sum of this file, ignoring this line and all that follow.\n")
+        ea.write("# Metadata SHA1 sum,{0}\n".format(sha1sum))
+        ea.write("# Archive ID       ,{0}\n".format(archiveId))
+        ea.write("# Vault            ,{0}\n".format(glacier_vault.arn))
+        ea.close()
 
     def uploadToS3(self, destfile, srcfile):
         print "Uploading {0} to s3://{1}/{2}".format(srcfile, self.bucketName, destfile)
