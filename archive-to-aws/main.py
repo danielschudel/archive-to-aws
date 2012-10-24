@@ -6,16 +6,17 @@ from getopt import getopt, GetoptError
 
 
 def usage():
+    """ Provide usage information when parameters are not complete """
     s =  "Usage: \n"
     s += "\tcreate   <directory>\n"
     s += "\tvalidate <archive file|directory>\n"
     s += "\tupload <aws options> <directory>\n"
     s += "\n"
     s += "Where <aws options> are each of the following:\n"
-    s += " -a, --access_key=ACCESS_KEY\n"
-    s += " -s, --secret_key=SECRET_KEY\n"
-    s += " -r, --region=REGION\n"
-    s += " -v, --vault=VAULT\n"
+    s += " -v, --vault=VAULT (Required - Glacier vault name)\n"
+    s += " -a, --access_key=ACCESS_KEY (if not specified will use standard Boto lookup)\n"
+    s += " -s, --secret_key=SECRET_KEY (if not specified will use standard Boto lookup)\n"
+    s += " -r, --region=REGION (if not specified, defaults to us-east-1)\n"
     s += "\n"
     sys.exit(s)
 
@@ -23,7 +24,7 @@ if len(sys.argv) < 2:
     usage()
 
 argv = sys.argv[1:]
-long_options = ['access_key=', 'secret_key=', 'region=', 'vault=']
+long_options = ['access_key=', 'secret_key=', 'region=', 'vault=', 'help']
 try:
     opts, args = getopt(argv, "", long_options)
 except GetoptError, e:
@@ -32,6 +33,8 @@ except GetoptError, e:
 options = dict()
 options['vault'] = "NotSpecified"
 options['region'] = "us-east-1"
+options['access_key'] = None
+options['secret_key'] = None
 for option, value in opts:
     if option in ('--access_key'):
         options['access_key'] = value
@@ -41,6 +44,8 @@ for option, value in opts:
         options['region'] = value
     elif option in ('--vault'):
         options['vault'] = value
+    elif option in ('--help'):
+        usage()
 
 if args[0]   == "create":
     a = archive.archive(args[1], options['vault'])

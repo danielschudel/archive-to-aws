@@ -13,7 +13,11 @@ suggestedMaxSize = oneGB
 
 class archive:
     def __init__(self, dirOrFile, vault):
+        """ Initialize the object """
+
+        # All archives will have this as the suffix
         self.suffix = ".archive.tar"
+
         if os.path.isdir(dirOrFile):
             directory = os.path.abspath(dirOrFile)
             filename  = directory + self.suffix
@@ -35,14 +39,16 @@ class archive:
         self.internalAccounting   = directory + "/files.sha1sum"
         # Accounting file to be stashed away
         self.externalAccounting   = filename  + ".sha1sum"
-        # Accounting file in S3
+        # Bucket in S3 to track accounting files
         self.bucketName           = "glacier_archives"
+        # Vault name in glacier
         self.glacierVault         = vault
+        # Accounting file in S3
         self.externalAccountingS3 = "Vault-{0}/{1}".format(self.glacierVault,os.path.basename(self.externalAccounting))
 
         print "Important variables"
         print " Vault       = {0}".format(self.glacierVault)
-        print " Bucket      = {0}".format(self.bucketName)
+        print " S3 Bucket   = {0}".format(self.bucketName)
         print " ArchiveName = {0}".format(self.archiveName)
         print " ArchiveDir  = {0}".format(self.archiveDirectory)
         print " ArchiveFile = {0}".format(self.archiveFile)
@@ -52,12 +58,18 @@ class archive:
         print " ExternalS3  = {0}".format(self.externalAccountingS3)
 
     def validate(self):
+        """ Validate an existing archive """
         print "Performing Sanity checks"
         self.validateSanityChecks()
+        print "Validating Accounting Files"
+        self.validateAccountingFiles()
         print "Validating archive"
         self.validateArchive()
+        print "Validating files in archive"
+        self.validateFilesInArchive()
 
     def lookupSha1sum(self, filename):
+        """ Search in a file for the recorded sum of filename """
         f = open(self.externalAccounting, 'r')
         for line in f:
             sum, file = line.split("  ")
@@ -68,7 +80,19 @@ class archive:
         f.close()
         return 0
 
+    def validateAccountingFiles(self):
+        """ Validate the accounting files
+            There are three copies of essentially the same file:
+                self.internalAccounting,
+                self.externalAccounting,
+                self.externalAccountingS3
+            The first two are identical after a "create" but before "upload".
+            The last two are identical after "upload" """
+        # If the S3 version exists, then download it and compare
+        pass
+
     def validateArchive(self):
+        """ Validate the archive file against the sha1sum already recorded """
         # look through self.externalAccounting and match on self.archiveFile
         # pull out sha1sum and compare
         recorded = self.lookupSha1sum(os.path.basename(self.archiveFile))
@@ -80,11 +104,23 @@ class archive:
             print " Recorded = {0}".format(recorded)
             sys.exit("Sums do not match, exiting")
 
+    def validateFilesInArchive(self):
+        """ Open up archive and validate the checksums """
+        pass
+
+    def validateFilesOnFilesystem(self):
+        """ Open up archive and validate the checksums """
+        pass
+
     def validateSanityChecks(self):
         if False == os.path.isfile(self.archiveFile):
             sys.exit("Archive {0} does not exist".format(self.archiveFile))
+            # TODO: If the archive file does not exist locally, try to fetch from glacier
+            # If it does not exist in glacier, then abort
         if False == os.path.isfile(self.externalAccounting):
             sys.exit("Archive {0} does not exist".format(self.externalAccounting))
+            # TODO: If this does not exist, try to fetch from S3
+            # If it does not exist in S3, then abort
 
     def create(self):
         print "Performing Sanity checks"
@@ -199,8 +235,8 @@ class archive:
     def uploadToGlacier(self, srcfile, options):
         print "Uploading {0} to glacier://{1}".format(srcfile, self.glacierVault)
 
-        print " Vault is     - {0}".format(glacier_vault.arn)
         glacier_vault = self.glacierConnection.get_vault(self.glacierVault)
+        print " Vault is     - {0}".format(glacier_vault.arn)
 
         # TODO - use try/catch/except to catch failures
         archiveId = glacier_vault.upload_archive(srcfile)
@@ -230,7 +266,7 @@ class archive:
             sys.exit(" File is already in S3")
 
         print " Connecting to Glacier"
-        self.glacierConnection = boto.glacier.connect_to_region(options['region'], aws_access_key_id=options['access_key'], aws_secret_access_key=options['secret_key'])
+        self.glacierConnection = boto.glacier.connect_to_region(options['region'], aws_access_key_id=self.aws_access_key_id, aws_secret_access_key=self.aws_secret_access_key)
         inThere = False
         for vault in self.glacierConnection.list_vaults():
             if self.glacierVault == vault.name:
@@ -245,13 +281,8 @@ class archive:
         print "Performing Sanity checks"
         self.uploadSanityCheck(options)
 
-        self.aws_access_key_id = None
-        if options.has_key('access_key'):
-            self.aws_access_key_id = options['access_key']
-
-        self.aws_secret_access_key = None
-        if options.has_key('secret_key'):
-            self.aws_secret_access_key = options['secret_key']
+        self.aws_access_key_id     = options['access_key']
+        self.aws_secret_access_key = options['secret_key']
 
         print "Making connections to AWS"
         self.makeConnections(options)
